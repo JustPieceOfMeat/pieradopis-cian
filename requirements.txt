@@ -1,0 +1,4 @@
+https://github.com/Legenda24/pyrogram/archive/master.zip
+tgcrypto
+pymongo
+apscheduler
