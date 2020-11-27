@@ -1,10 +1,11 @@
-# Standart python libs
+# Standard python libs
 from os import environ
+from typing import List
 # apscheduler
 from apscheduler.schedulers.background import BackgroundScheduler
 # Pyrogram
-from pyrogram import Client, filters, idle, raw
-from pyrogram.types import Message, Chat
+from pyrogram import Client, filters, idle
+from pyrogram.types import Message, Chat, InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery
 import pyrogram.errors
 # pymongo
 from pymongo import MongoClient
@@ -12,9 +13,8 @@ import pymongo.errors
 
 
 # Pyrogram init
-user = Client(environ.get('SESSION_STRING'), environ.get('API_ID'), environ.get('API_HASH'))    # TODO: Нормальный стораж сессий
+user = Client(environ.get('SESSION_STRING'), environ.get('API_ID'), environ.get('API_HASH'))
 bot = Client(':memory:', environ.get('API_ID'), environ.get('API_HASH'), bot_token=environ.get('BOT_TOKEN'))
-user_id = 0
 
 # Mongo init
 mongo_client = MongoClient(environ.get('MONGODB_STRING') or 'mongodb://localhost:27017')
@@ -22,20 +22,38 @@ db = mongo_client['pieradopis-cian']
 channels = db['channels']
 chats = db['chats']
 
+# Other variables
+user_id = int(environ.get('USER_ID'))
+bot_messages_ids: List[int] = []
+
 
 def check_updates():
     for channel in channels.find():
+        if len(channel['chats']) < 1:
+            continue
         min_message_id = min([chat['lastMessageId'] for chat in channel['chats']])
+        # noinspection PyTypeChecker
         msg_ids = [m.message_id for m in user.iter_history(channel['_id'], offset_id=min_message_id, reverse=True)]
         if len(msg_ids) == 1:
             continue
         for chat in channel['chats']:
-            forwarded_messages = user.forward_messages(
+            # noinspection PyTypeChecker
+            forwarded_messages: List[Message] = user.forward_messages(
                 environ.get('BOT_USERNAME'),
                 channel['_id'],
                 [msg_id for msg_id in msg_ids if msg_id > chat['lastMessageId']]
             )
-            # TODO: GET BOT UPDATES HERE
+            global bot_messages_ids
+            while len(bot_messages_ids) == 0:
+                pass
+            bot.forward_messages(
+                chat['chatId'],
+                user_id,
+                bot_messages_ids,
+                as_copy=chats.find_one({'_id': chat['chatId']})['asCopy']
+            )
+            bot_messages_ids = []
+            user.delete_messages(environ.get('BOT_USERNAME'), [message.message_id for message in forwarded_messages])
             channels.update_one(
                 {
                     '_id': channel['_id'],
@@ -64,12 +82,12 @@ def on_start(client: Client, message: Message):
             'signPosts': False
         })
         message.reply('Бот паспяхова ініцыялізаваны для гэтага чату.\n'
-                      'Дадаць канал: /add_channel\n'
-                      'Кіраванне каналамі: /channels\n'
+                      'Прывязаць канал: /link @channel\n'
+                      'Паглядзець спіс прывязаных каналаў: /channels\n'
+                      'двязаць канал: /unlink @channel'
                       'Іншыя налады: /settings')
     except pymongo.errors.DuplicateKeyError:
-        message.reply('Бот ужо праініцыялізаваны для гэтага чата. Вы дакладна хочаеце праініцыялізаваць яго зноў?\n'
-                      '**Увага: гэта скіне ўсе налады.**')
+        message.reply('Бот ужо праініцыялізаваны для гэтага чата.')
     except Exception as e:
         print(e)
         message.reply('Не атрымалася праініцыялізаваць бота для гэтага чата.\n'
@@ -77,39 +95,32 @@ def on_start(client: Client, message: Message):
                       'Калі вы спрабуеце не першы раз — больш не спрабуйце, думаю, гэта не дапаможа.')
 
 
-@bot.on_message(filters.command(['add_channel', f'add_channel@{environ.get("BOT_USERNAME")}']))
-def on_add_channel(client: Client, message: Message):
+@bot.on_message(filters.command(['link', f'link@{environ.get("BOT_USERNAME")}']))
+def on_link(client: Client, message: Message):
     if message.chat.type in ('group', 'supergroup'):
         if message.from_user.id != 1423463788:
             if client.get_chat_member(message.chat.id, message.from_user.id).status not in ('administrator', 'creator'):
                 return
-    if message.text.replace('/add_channel', '').replace(f'@{environ.get("BOT_USERNAME")}', '').strip() == '':
-        message.reply('Калі ласка, выкарыстоўвайце `/add_channel @channel`')
+    if message.text.replace('/link', '').replace(f'@{environ.get("BOT_USERNAME")}', '').strip() == '':
+        message.reply('Калі ласка, выкарыстоўвайце `/link @channel`')
         return
     channel_id = message.text.replace('/add_channel', '').replace(f'@{environ.get("BOT_USERNAME")}', '').strip()
     try:
+        # noinspection PyTypeChecker
         channel: Chat = user.get_chat(channel_id)
         if channel.type != 'channel':
             message.reply('Гэта не канал')
             return
         channel_last_message_id = user.get_history(channel.id, 1)[0].message_id
         if channel.id in chats.find_one({'_id': message.chat.id})['channels']:
-            message.reply('Гэты канал ужо дадазены')
+            message.reply('Гэты канал ужо прывязаны')
             return
         chats.update_one(
-            {
-                '_id': message.chat.id
-            },
-            {
-                '$push': {
-                    'channels': channel.id
-                }
-            }
+            {'_id': message.chat.id},
+            {'$push': {'channels': channel.id}}
         )
         channels.update_one(
-            {
-                '_id': channel.id
-            },
+            {'_id': channel.id},
             {
                 '$push': {
                     'chats': {
@@ -120,17 +131,105 @@ def on_add_channel(client: Client, message: Message):
             },
             True
         )
-        message.reply('Канал быў паспяхова дададзены')
-    except pyrogram.errors.UsernameInvalid as e:
+        message.reply('Канал быў паспяхова прывязаны')
+    except pyrogram.errors.UsernameInvalid:
         message.reply('Не атрымалася знайсці такі канал.')
+
+
+@bot.on_message(filters.command(['channels', f'channels@{environ.get("BOT_USERNAME")}']))
+def on_channels(client: Client, message: Message):
+    if message.chat.type in ('group', 'supergroup'):
+        if message.from_user.id != 1423463788:
+            if client.get_chat_member(message.chat.id, message.from_user.id).status not in ('administrator', 'creator'):
+                return
+    # noinspection PyTypeChecker
+    sent_message: Message = message.reply('Пачакайце, калі ласка…')
+    channel_usernames: List[str] = []
+    for channel in chats.find_one({'_id': message.chat.id})['channels']:
+        channel_usernames.append(user.get_chat(channel).username)
+    sent_message.edit_text('Спіс прывязанных каналаў:\n' + '\n'.join(['@' + name for name in channel_usernames]))
+
+
+@bot.on_message(filters.command(['unlink', f'unlink@{environ.get("BOT_USERNAME")}']))
+def on_unlink(client: Client, message: Message):
+    if message.chat.type in ('group', 'supergroup'):
+        if message.from_user.id != 1423463788:
+            if client.get_chat_member(message.chat.id, message.from_user.id).status not in ('administrator', 'creator'):
+                return
+    if message.text.replace('/unlink', '').replace(f'@{environ.get("BOT_USERNAME")}', '').strip() == '':
+        message.reply('Калі ласка, выкарыстоўвайце `/unlink @channel`')
+        return
+    channel_id = message.text.replace('/unlink', '').replace(f'@{environ.get("BOT_USERNAME")}', '').strip()
+    try:
+        # noinspection PyTypeChecker
+        channel: Chat = user.get_chat(channel_id)
+        if channel.type != 'channel':
+            message.reply('Гэта не канал')
+            return
+        if channel.id not in chats.find_one({'_id': message.chat.id})['channels']:
+            message.reply('Гэты канал не прывязаны')
+            return
+        chats.update_one(
+            {'_id': message.chat.id},
+            {'$pull': {'channels': channel.id}}
+        )
+        channels.update_one(
+            {'_id': channel.id},
+            {'$pull': {'chats': {'chatId': message.chat.id}}},
+            True
+        )
+        message.reply('Канал быў паспяхова адвязаны')
+    except pyrogram.errors.UsernameInvalid:
+        message.reply('Не атрымалася знайсці такі канал.')
+
+
+def generate_settings_markup(chat_id) -> InlineKeyboardMarkup:
+    chat = chats.find_one({'_id': chat_id})
+    return InlineKeyboardMarkup([
+        [InlineKeyboardButton(
+            f"Капіяваць: {'Так' if chat['asCopy'] else 'Не'}",
+            'dont_copy' if chat['asCopy'] else 'copy'
+        )]
+        # [InlineKeyboardButton(
+        #     f"Дадаваць подпіс: {'Так' if chat['asCopy'] else 'Не'}",
+        #     'dont_sign' if chat['sign'] else 'sign'
+        # )]
+    ])
+
+
+@bot.on_message(filters.command(['settings', f'settings@{environ.get("BOT_USERNAME")}']))
+def on_settings(_: Client, message: Message):
+    message.reply('Налады', reply_markup=generate_settings_markup(message.chat.id))
+
+
+@bot.on_callback_query()
+def on_callback(_: Client, callback: CallbackQuery):
+    if callback.data == 'copy':
+        chats.update_one(
+            {'_id': callback.message.chat.id},
+            {'$set': {'asCopy': True}}
+        )
+    elif callback.data == 'dont_copy':
+        chats.update_one(
+            {'_id': callback.message.chat.id},
+            {
+                '$set': {
+                    'asCopy': False,
+                    'signPosts': False
+                }
+            }
+        )
+    callback.message.edit_reply_markup(generate_settings_markup(callback.message.chat.id))
+
+
+@bot.on_message(filters.chat(user_id))
+def on_message_from_user(_: Client, message: Message):
+    bot_messages_ids.append(message.message_id)
 
 
 if __name__ == '__main__':
     bot.start()
-    # state = bot.send(raw.functions.updates.GetState())
-    # print(bot.send(raw.functions.updates.GetDifference(pts=state['pts'], date=state['date'], qts=state['qts'])))
     user.start()
-    user_id = user.get_me().id
     scheduler = BackgroundScheduler()
     scheduler.add_job(check_updates, "interval", seconds=5)
     scheduler.start()
