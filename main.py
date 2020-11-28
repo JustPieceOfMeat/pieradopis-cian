@@ -44,7 +44,7 @@ def check_updates():
                 [msg_id for msg_id in msg_ids if msg_id > chat['lastMessageId']]
             )
             global bot_messages_ids
-            while len(bot_messages_ids) == 0:
+            while len(bot_messages_ids) != len(forwarded_messages):
                 pass
             bot.forward_messages(
                 chat['chatId'],
@@ -231,7 +231,6 @@ if __name__ == '__main__':
     bot.start()
     user.start()
     scheduler = BackgroundScheduler()
-    scheduler.add_job(check_updates, "interval", seconds=5)
+    scheduler.add_job(check_updates, "interval", seconds=60)
     scheduler.start()
-    print('started')
     idle()
