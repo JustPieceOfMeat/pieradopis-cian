@@ -104,7 +104,7 @@ def on_link(client: Client, message: Message):
     if message.text.replace('/link', '').replace(f'@{environ.get("BOT_USERNAME")}', '').strip() == '':
         message.reply('Калі ласка, выкарыстоўвайце `/link @channel`')
         return
-    channel_id = message.text.replace('/add_channel', '').replace(f'@{environ.get("BOT_USERNAME")}', '').strip()
+    channel_id = message.text.replace('/link', '').replace(f'@{environ.get("BOT_USERNAME")}', '').strip()
     try:
         # noinspection PyTypeChecker
         channel: Chat = user.get_chat(channel_id)
