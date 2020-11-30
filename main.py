@@ -40,8 +40,9 @@ def check_updates():
         messages: List[Message] = \
             [message for message in user.iter_history(channel['_id'], offset_id=min_message_id, reverse=True)
              if not message.service]
-        msg_ids = [m.message_id for m in messages]
-        no_nsfw_msg_ids = [m.message_id for m in messages if 'NSFW' not in ' '.join([str(m.text), str(m.caption)])]
+        msg_ids = [m.message_id for m in messages if 'NOT_FOR_FORWARD' not in ' '.join([str(m.text), str(m.caption)])]
+        no_nsfw_msg_ids = [m.message_id for m in messages if 'NSFW' not in ' '.join([str(m.text), str(m.caption)]) and
+                           'NOT_FOR_FORWARD' not in ' '.join([str(m.text), str(m.caption)])]
         if len(msg_ids) == 1:
             continue
         for chat in channel['chats']:
