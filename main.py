@@ -13,7 +13,11 @@ import pymongo.errors
 
 
 # Pyrogram init
-user = Client(environ.get('SESSION_STRING'), environ.get('API_ID'), environ.get('API_HASH'))
+user = Client(
+    '/sessions/user' if environ.get('DOCKER') else (environ.get('SESSION_NAME') or 'my_account'),
+    environ.get('API_ID'),
+    environ.get('API_HASH')
+)
 bot = Client(':memory:', environ.get('API_ID'), environ.get('API_HASH'), bot_token=environ.get('BOT_TOKEN'))
 
 # Mongo init
@@ -267,6 +271,6 @@ if __name__ == '__main__':
     bot.start()
     user.start()
     scheduler = BackgroundScheduler()
-    scheduler.add_job(check_updates, "interval", seconds=5)
+    scheduler.add_job(check_updates, "interval", seconds=60)
     scheduler.start()
     idle()
