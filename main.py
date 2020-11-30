@@ -96,10 +96,9 @@ def on_start(client: Client, message: Message):
 
 @bot.on_message(filters.command(['init', f'init@{environ.get("BOT_USERNAME")}']) & filters.group)
 def on_init(client: Client, message: Message):
-    if message.chat.type in ('group', 'supergroup'):
-        if message.from_user.id != 1423463788:
-            if client.get_chat_member(message.chat.id, message.from_user.id).status not in ('administrator', 'creator'):
-                return
+    if message.from_user.id != user_id:
+        if client.get_chat_member(message.chat.id, message.from_user.id).status not in ('administrator', 'creator'):
+            return
     try:
         chats.insert_one({
             '_id': message.chat.id,
@@ -124,10 +123,9 @@ def on_init(client: Client, message: Message):
 
 @bot.on_message(filters.command(['link', f'link@{environ.get("BOT_USERNAME")}']) & filters.group)
 def on_link(client: Client, message: Message):
-    if message.chat.type in ('group', 'supergroup'):
-        if message.from_user.id != 1423463788:
-            if client.get_chat_member(message.chat.id, message.from_user.id).status not in ('administrator', 'creator'):
-                return
+    if message.from_user.id != user_id:
+        if client.get_chat_member(message.chat.id, message.from_user.id).status not in ('administrator', 'creator'):
+            return
     if message.text.replace('/link', '').replace(f'@{environ.get("BOT_USERNAME")}', '').strip() == '':
         message.reply('Калі ласка, выкарыстоўвайце `/link @channel`')
         return
@@ -165,10 +163,9 @@ def on_link(client: Client, message: Message):
 
 @bot.on_message(filters.command(['channels', f'channels@{environ.get("BOT_USERNAME")}']) & filters.group)
 def on_channels(client: Client, message: Message):
-    if message.chat.type in ('group', 'supergroup'):
-        if message.from_user.id != 1423463788:
-            if client.get_chat_member(message.chat.id, message.from_user.id).status not in ('administrator', 'creator'):
-                return
+    if message.from_user.id != user_id:
+        if client.get_chat_member(message.chat.id, message.from_user.id).status not in ('administrator', 'creator'):
+            return
     # noinspection PyTypeChecker
     sent_message: Message = message.reply('Пачакайце, калі ласка…')
     channel_usernames: List[str] = []
@@ -179,10 +176,9 @@ def on_channels(client: Client, message: Message):
 
 @bot.on_message(filters.command(['unlink', f'unlink@{environ.get("BOT_USERNAME")}']) & filters.group)
 def on_unlink(client: Client, message: Message):
-    if message.chat.type in ('group', 'supergroup'):
-        if message.from_user.id != 1423463788:
-            if client.get_chat_member(message.chat.id, message.from_user.id).status not in ('administrator', 'creator'):
-                return
+    if message.from_user.id != user_id:
+        if client.get_chat_member(message.chat.id, message.from_user.id).status not in ('administrator', 'creator'):
+            return
     if message.text.replace('/unlink', '').replace(f'@{environ.get("BOT_USERNAME")}', '').strip() == '':
         message.reply('Калі ласка, выкарыстоўвайце `/unlink @channel`')
         return
@@ -234,7 +230,11 @@ def on_settings(_: Client, message: Message):
 
 
 @bot.on_callback_query()
-def on_callback(_: Client, callback: CallbackQuery):
+def on_callback(client: Client, callback: CallbackQuery):
+    if callback.from_user.id != user_id:
+        if client.get_chat_member(callback.message.chat.id, callback.from_user.id).status not in\
+                ('administrator', 'creator'):
+            return
     if callback.data == 'copy':
         chats.update_one(
             {'_id': callback.message.chat.id},
