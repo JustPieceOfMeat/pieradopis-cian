@@ -105,7 +105,8 @@ def on_init(client: Client, message: Message):
             'channels': [],
             'language': 'BY',
             'asCopy': False,
-            'signPosts': False
+            'signPosts': False,
+            'NSFW': False
         })
         message.reply('Бот паспяхова ініцыялізаваны для гэтага чату.\n'
                       'Прывязаць канал: /link @channel\n'
@@ -125,7 +126,8 @@ def on_init(client: Client, message: Message):
 def on_link(client: Client, message: Message):
     if message.from_user.id != user_id:
         if client.get_chat_member(message.chat.id, message.from_user.id).status not in ('administrator', 'creator'):
-            return
+            if message.chat.id != message.from_user.id:
+                return
     if message.text.replace('/link', '').replace(f'@{environ.get("BOT_USERNAME")}', '').strip() == '':
         message.reply('Калі ласка, выкарыстоўвайце `/link @channel`')
         return
@@ -250,7 +252,7 @@ def on_callback(client: Client, callback: CallbackQuery):
                 }
             }
         )
-    elif callback.data == 'send_NSFW':
+    elif callback.data == 'send_NSFWs':
         chats.update_one(
             {'_id': callback.message.chat.id},
             {'$set': {'NSFW': True}}
