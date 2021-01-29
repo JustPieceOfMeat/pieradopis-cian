@@ -76,17 +76,25 @@ def check_updates():
                     environ.get('BOT_USERNAME'),
                     [message.message_id for message in forwarded_messages]
                 )
-            channels.update_one(
-                {
-                    '_id': channel['_id'],
-                    'chats.chatId': chat['chatId']
-                },
-                {
-                    '$set': {
-                        'chats.$.lastMessageId': max(msg_ids)
+            try:
+                channels.update_one(
+                    {
+                        '_id': channel['_id'],
+                        'chats.chatId': chat['chatId']
+                    },
+                    {
+                        '$set': {
+                            'chats.$.lastMessageId': max(msg_ids)
+                        }
                     }
-                }
-            )
+                )
+            except Exception as e:
+                print(e)
+                print(channel)
+                print(channel['_id'])
+                print(chat)
+                print(chat['chatId'])
+                print(msg_ids)
 
 
 @bot.on_message(filters.command('start'))
@@ -273,6 +281,8 @@ def on_message_from_user(_: Client, message: Message):
 if __name__ == '__main__':
     bot.start()
     user.start()
+    print(bot.get_me().username)
+    print(user.get_me().username)
     scheduler = BackgroundScheduler()
     scheduler.add_job(check_updates, "interval", seconds=60)
     scheduler.start()
