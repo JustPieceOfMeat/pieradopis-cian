@@ -1,4 +1,5 @@
 from os import environ
+from time import sleep
 from typing import List
 
 from apscheduler.schedulers.background import BackgroundScheduler
@@ -61,27 +62,37 @@ def check_updates():
                     [msg_id for msg_id in msg_ids if msg_id > chat['lastMessageId']]
                 )
             elif len(no_nsfw_msg_ids) > 1:
-                # noinspection PyTypeChecker
-                forwarded_messages = user.forward_messages(
-                    environ.get('BOT_USERNAME'),
-                    channel['_id'],
-                    [msg_id for msg_id in no_nsfw_msg_ids if msg_id > chat['lastMessageId']]
-                )
+                try:
+                    # noinspection PyTypeChecker
+                    forwarded_messages = user.forward_messages(
+                        environ.get('BOT_USERNAME'),
+                        channel['_id'],
+                        [msg_id for msg_id in no_nsfw_msg_ids if msg_id > chat['lastMessageId']]
+                    )
+                except pyrogram.errors.FloodWait as e:
+                    print(f'FloodWait {e.x} seconds.')
+                    return
             global bot_messages_ids
             while len(bot_messages_ids) != len(forwarded_messages):
                 pass
             if len(bot_messages_ids) > 0:
-                bot.forward_messages(
-                    chat['chatId'],
-                    user_id,
-                    bot_messages_ids,
-                    as_copy=chats.find_one({'_id': chat['chatId']})['asCopy']
-                )
-                bot_messages_ids = []
-                user.delete_messages(
-                    environ.get('BOT_USERNAME'),
-                    [message.message_id for message in forwarded_messages]
-                )
+                try:
+                    bot.forward_messages(
+                        chat['chatId'],
+                        user_id,
+                        bot_messages_ids,
+                        as_copy=chats.find_one({'_id': chat['chatId']})['asCopy']
+                    )
+                    bot_messages_ids = []
+                    user.delete_messages(
+                        environ.get('BOT_USERNAME'),
+                        [message.message_id for message in forwarded_messages]
+                    )
+                except pyrogram.errors.FloodWait as e:
+                    if e.x <= 10:
+                        sleep(e.x)
+                    else:
+                        return 
             try:
                 channels.update_one(
                     {
@@ -290,6 +301,6 @@ if __name__ == '__main__':
     print(bot.get_me().username)
     print(user.get_me().username)
     scheduler = BackgroundScheduler()
-    scheduler.add_job(check_updates, "interval", seconds=300)
+    scheduler.add_job(check_updates, "interval", seconds=120)
     scheduler.start()
     idle()
