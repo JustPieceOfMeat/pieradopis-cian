@@ -1,13 +1,12 @@
-# Standard python libs
 from os import environ
-from typing import List, Iterable
-# apscheduler
+from typing import List
+
 from apscheduler.schedulers.background import BackgroundScheduler
-# Pyrogram
+
 from pyrogram import Client, filters, idle
 from pyrogram.types import Message, Chat, InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery
 import pyrogram.errors
-# pymongo
+
 from pymongo import MongoClient
 import pymongo.errors
 
@@ -16,9 +15,16 @@ import pymongo.errors
 user = Client(
     '/sessions/user' if environ.get('DOCKER') else (environ.get('SESSION_NAME') or 'my_account'),
     environ.get('API_ID'),
-    environ.get('API_HASH')
+    environ.get('API_HASH'),
+    sleep_threshold=0
 )
-bot = Client(':memory:', environ.get('API_ID'), environ.get('API_HASH'), bot_token=environ.get('BOT_TOKEN'))
+bot = Client(
+    ':memory:',
+    environ.get('API_ID'),
+    environ.get('API_HASH'),
+    bot_token=environ.get('BOT_TOKEN'),
+    sleep_threshold=0
+)
 
 # Mongo init
 mongo_client = MongoClient(environ.get('MONGODB_STRING') or 'mongodb://localhost:27017')
@@ -98,7 +104,7 @@ def check_updates():
 
 
 @bot.on_message(filters.command('start'))
-def on_start(client: Client, message: Message):
+def on_start(_: Client, __: Message):
     print('Вітаю, я працую толькі ў чатах. Дадай мяне ў любы чат і напішы /init каб праініцыялізаваць.')
 
 
@@ -284,6 +290,6 @@ if __name__ == '__main__':
     print(bot.get_me().username)
     print(user.get_me().username)
     scheduler = BackgroundScheduler()
-    scheduler.add_job(check_updates, "interval", seconds=60)
+    scheduler.add_job(check_updates, "interval", seconds=300)
     scheduler.start()
     idle()

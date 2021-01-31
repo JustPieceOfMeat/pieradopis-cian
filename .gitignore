@@ -134,3 +134,4 @@ pyrogram/
 .run/
 my_account.session
 my_account.session-journal
+unknown_errors.txt
